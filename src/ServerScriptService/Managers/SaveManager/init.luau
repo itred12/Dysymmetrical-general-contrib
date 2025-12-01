@@ -100,109 +100,20 @@ end
 --- Sets up save data handlers, listens for players joining and leaving to read, write, retrieve, and store save data.
 function SaveManager:Init()
 
-	-- Validate the default values for playerdata, and make sure they point to killers/survivors that exist. If killers/survivors are moved and this isn't updated, new players could otherwise get an invalid killer/survivor, and become softlocked.
-	-- We *want* the game to hang for a bit to check these, since new players wont be able to join the game if it's malformed.
+	-- Quickly check and validate the default values for the starting killers, survivors, and skins; making sure they point to killers/survivors that still exist. 
+	-- If killers/survivors are moved and this values aren't updated, new players would otherwise be given an invalid killer/survivor, and potentially become softlocked.
+	
+	-- This is wrapped in a pcall so I can more easily handle the semi-rare case when the values I'm trying to check don't exist.
+	local success, errormsg = pcall(function()
 
-	-- First, check to make sure the valueobjects which these would be stored in exist.
+		
 
-	-- Quickly flip through and make sure the valueobjects we need exist. Eventually may create them on its own, to make things easier.
-	if not (script.PlayerData and script.PlayerData.Equipped and script.PlayerData.Equipped.Killer and script.PlayerData.Equipped.Survivor and script.PlayerData.Purchased and script.PlayerData.Purchased.Killers and script.PlayerData.Purchased.Skins and script.PlayerData.Purchased.Survivors) then
-		error("[SaveManager:Init()] – ERROR: Default playerdata may be missing important pieces, or entirely absent! Check for a folder in ServerScriptService/Managers/SaveManager/PlayerData. If you know what you're doing, you can silence this message in ServerScriptService/Managers/SaveManager.")
+	end)
+	
+	if not success then
+		warn("[SaveManager:Init()] – WARNING: Starting (default) playerdata failed to validate! New players joining the game may be recieving and saving invalid data!")
+		warn("Error message: ['"..errormsg.."']")
 	end
-
-	local Playerdata = script.PlayerData
-	local EquippedFolder = Playerdata.Equipped
-	local PurchasedFolder = Playerdata.Purchased
-
-	-- Check if the listed default killer still exists
-	local DefaultKiller = EquippedFolder.Killer.Value
-	local KillerModule = Utils.Instance.GetCharacterModule("Killer", DefaultKiller)
-
-	-- If the default killer points to a killer who doesn't exist anymore, grab the first one the game can find and use that as the default instead.
-	if not KillerModule then
-
-		local AllKillers = ReplicatedStorage:FindFirstChild("Characters"):FindFirstChild("Killers"):GetChildren()
-
-		-- Set the default equipped killer to the first killer found in this list as a temporary, non-error-prone solution. This can be changed by the user to another killer, and the game wont try to do this again unless the killer this value points to doesn't exist again.
-		EquippedFolder.Killer.Value = AllKillers[1].Name
-
-		-- "This could technically error if no killers are found, but if such is the case, I think the developer has bigger errors to worry about, so I think its fine to leave it as-is" – Itred
-
-		warn("[SaveManager:Init()] – INFO: Default (template) playerdata points to a killer which no longer exists. Substituting with '"..AllKillers[1].Name.."' for now. \nModify the value in 'ServerScriptService/Managers/SaveManager/PlayerData/Equipped/Killer' if you wish to set a different default killer.")
-
-	end
-
-
-	-- Check if the listed default survivors still exists
-	local DefaultSurvivor = EquippedFolder.Survivor.Value
-	local SurvivorModule = Utils.Instance.GetCharacterModule("Survivor", DefaultSurvivor)
-
-	-- Same deal for survivors– If the default survivor points to one whom doesn't exist anymore, grab the first one the game can find and use that as the default instead.
-	if not SurvivorModule then
-
-		local AllSurvivors = ReplicatedStorage:FindFirstChild("Characters"):FindFirstChild("Survivors"):GetChildren()
-
-		-- Similarly, set the default equipped survivor to the first survivor found in this list as a temporary, non-error-prone solution. This can be changed by the user to another survivor, and the game wont try to do this again unless the survivor this value points to doesn't exist again.
-		EquippedFolder.Survivor.Value = AllSurvivors[1].Name
-
-		-- "This, too, could technically error if no survivors are found, but if such is the case, what are you even doing." – Itred
-
-		warn("[SaveManager:Init()] – INFO: Default (template) playerdata points to a survivor which no longer exists. Substituting with '"..AllSurvivors[1].Name.."' for now. \nModify the value in 'ServerScriptService/Managers/SaveManager/PlayerData/Equipped/Survivor' if you wish to set a different default survivor.")
-
-	end
-
-
-	-- Also check for the default purchased killer/survivor. Note, however, that this will only apply to the template data, so bought killers by players that are to be replaced later will also be unaffected.
-
-	-- Default purchased killers:
-	for index, purchasedkiller in PurchasedFolder.Killers:GetChildren() do
-
-		-- Find its module.
-		local PurchasedKillerModule = Utils.Instance.GetCharacterModule("Killer", purchasedkiller.Name)
-
-		-- If it doesn't exist, set its name to the default killer instead after just one more check.
-		if not PurchasedKillerModule then
-
-			-- Check to see if theres already a valueobject tied to the default killer. If there isn't, then assume that the sole default purchased killer should match the default killer.
-			if not PurchasedFolder.Killers:FindFirstChild(DefaultKiller) then 
-
-				purchasedkiller.Name = EquippedFolder.Killer.Value -- Re-read from the newly-updated killer value
-				warn("[SaveManager:Init()] – INFO: Default (template) purchased killer doesn't exist. Modifying to match default equipped killer... Change this in 'ServerScriptService/Managers/SaveManager/PlayerData/Purchased/Killer' if you wish to set your own default purchased killer.")
-
-			else
-
-				warn("[SaveManager:Init()] – WARNING: More than one default purchased killer pointed to a character which didn't exist! For stability reasons, these will be temporarily destroyed. Check 'ServerScriptService/Managers/SaveManager/PlayerData/Purchased/Killer' to diagonose any issues.")
-				purchasedkiller:Destroy()
-
-			end
-		end
-	end
-
-
-	-- Default purchased survivors:
-	for index, purchasedsurvivor in PurchasedFolder.Survivors:GetChildren() do
-
-		-- Find its module.
-		local PurchasedSurvivorModule = Utils.Instance.GetCharacterModule("Survivor", purchasedsurvivor.Name)
-
-		-- If it doesn't exist, set its name to the default survivor instead after just one more check.
-		if not PurchasedSurvivorModule then
-
-			-- Same deal as with the killer– Check to see if theres already a valueobject tied to the default survivor. If there isn't, then assume that the sole default purchased survivor should match the default survivor.
-			if not PurchasedFolder.Survivors:FindFirstChild(DefaultSurvivor) then 
-
-				purchasedsurvivor.Name = EquippedFolder.Survivor.Value -- Re-read from the newly-updated survivor value
-				warn("[SaveManager:Init()] – INFO: Default purchased killer doesn't exist. Modifying to match default equipped killer... Change this in 'ServerScriptService/Managers/SaveManager/PlayerData/Purchased/Killer' if you wish to set your own default purchased killer.")
-
-			else
-
-				warn("[SaveManager:Init()] – WARNING: More than one default purchased killer pointed to a character which didn't exist! For stability reasons, these will be temporarily destroyed. Check 'ServerScriptService/Managers/SaveManager/PlayerData/Purchased/Killer' to diagonose any issues.")
-				purchasedsurvivor:Destroy()
-
-			end
-		end
-	end
-
 
 
 	-- Watches for players joining the game through a custom version of Players.PlayerAdded. See in Utils.Player for more information..
