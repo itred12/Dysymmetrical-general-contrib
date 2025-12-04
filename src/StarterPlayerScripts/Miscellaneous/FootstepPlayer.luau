@@ -7,12 +7,14 @@ local Utils = require(ReplicatedStorage.Modules.Utils)
 local Sounds = require(ReplicatedStorage.Modules.Sounds)
 
 local FootstepPlayer = {
-	SFXID = "rbxassetid://78754179999047"
+	DefaultSFXID = "rbxassetid://78754179999047",
+	ControlledCharacters = {},
 }
 
-function FootstepPlayer:PlayFootstep(Anchor: BasePart)
+function FootstepPlayer:PlayFootstep(player: Player, Anchor: BasePart)
 	if Anchor:FindFirstChildOfClass("LinearVelocity") or Anchor.Parent:GetAttribute("Emoting") then return end
-	Sounds:PlaySound(FootstepPlayer.SFXID, {
+	
+	Sounds:PlaySound(self.ControlledCharacters[player.UserId] or self.DefaultSFXID, {
 		MinPitch = 0.9,
 		MaxPitch = 1.05,
 	}, {
@@ -20,40 +22,43 @@ function FootstepPlayer:PlayFootstep(Anchor: BasePart)
 	})
 end
 
-function FootstepPlayer:_SetupChar(character: Model)
-	local HRP = Utils:FindFirstChild(character, "HumanoidRootPart")
+function FootstepPlayer:_SetupChar(player: Player, character: Model)
+	local HRP = Utils.Instance.FindFirstChild(character, "HumanoidRootPart")
 	if not HRP then
 		return
 	end
-	local Humanoid = Utils:FindFirstChild(character, "Humanoid")
+	local Humanoid = Utils.Instance.FindFirstChild(character, "Humanoid")
 	if not Humanoid then
 		return
 	end
-	Utils:FindFirstChild(Humanoid, "Animator").AnimationPlayed:Connect(function(track: AnimationTrack)
+
+	if character:GetAttribute("CharacterName") then
+		local CharModule = require(Utils.Instance.GetCharacterModule(character.Role.Value, character:GetAttribute("CharacterName"), character:GetAttribute("CharacterSkinName")))
+		if CharModule.Config.Sounds.FootstepSounds then
+			self.ControlledCharacters[player.UserId] = CharModule.Config.Sounds.FootstepSounds
+		end
+	end
+
+	Utils.Instance.FindFirstChild(Humanoid, "Animator").AnimationPlayed:Connect(function(track: AnimationTrack)
 		track:GetMarkerReachedSignal("Footstep"):Connect(function()
 			if (character.PlayerAttributes.Sprinting and character.PlayerAttributes.Sprinting.Value) or Humanoid.FloorMaterial == Enum.Material.Air or HRP.Anchored then
 				return
 			end
-			FootstepPlayer:PlayFootstep(HRP)
+			self:PlayFootstep(player, HRP)
 		end)
 	end)
 end
 
 function FootstepPlayer:Init()
-	for _, i in Players:GetPlayers() do
-		if i.Character then
-			FootstepPlayer:_SetupChar(i.Character)
+	Utils.Player.ObservePlayers(function(plr: Player)
+		Utils.Character.ObserveCharacter(plr, function(newChar: Model)
+			self:_SetupChar(plr, newChar)
+		end)
+	end)
+	Players.PlayerRemoving:Connect(function(plr: Player)
+		if self.ControlledCharacters[plr.UserId] then
+			self.ControlledCharacters[plr.UserId] = nil
 		end
-
-		i.CharacterAdded:Connect(function(newChar: Model)
-			FootstepPlayer:_SetupChar(newChar)
-		end)
-	end
-
-	Players.PlayerAdded:Connect(function(plr: Player)
-		plr.CharacterAdded:Connect(function(newChar: Model)
-			FootstepPlayer:_SetupChar(newChar)
-		end)
 	end)
 end
 

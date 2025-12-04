@@ -9,6 +9,7 @@ local CharManager = {}
 local LocalPlayer = Players.LocalPlayer
 
 local AbilityGUI = require(ReplicatedStorage.Classes.Ability.AbilityGUI)
+local Character = require(ReplicatedStorage.Classes.Character)
 local Utils = require(ReplicatedStorage.Modules.Utils)
 
 local AnimLoadPrevented = {
@@ -16,11 +17,12 @@ local AnimLoadPrevented = {
     "WalkAnimation",
     "RunAnimation",
     "SlashAnimation",
+    "Execution",
 }
 
 function CharManager:Init()
-    LocalPlayer.CharacterAdded:Connect(function(Char: Model)
-        if Utils:FindFirstChild(Char, "Role").Value ~= "Spectator" then
+    Utils.Character.ObserveCharacter(LocalPlayer, function(Char: Model)
+        if Utils.Instance.FindFirstChild(Char, "Role").Value ~= "Spectator" then
             self:LoadCharacter(Char:GetAttribute("CharacterName"), Char.Role.Value, Char:GetAttribute("CharacterSkinName"))
         end
     end)
@@ -38,12 +40,23 @@ function CharManager:_InitCharacterAbilities(Module)
         end
     end
 
-    for name, anim in Module.Config.AnimationIDs do
-        if table.find(AnimLoadPrevented, name) then
-            continue
+    local function LoadAnim(name, anim)
+        if typeof(anim) == "table" then
+            for Name, Anim in anim do
+                LoadAnim(Name, Anim)
+            end
+            return
         end
 
-        Module.GameplayConfig.Cache.Animations[name] = Utils:LoadAnimationFromID(LocalPlayer.Character, anim, false)
+        if table.find(AnimLoadPrevented, name) then
+            return
+        end
+
+        Module.GameplayConfig.Cache.Animations[name] = Utils.Character.LoadAnimationFromID(LocalPlayer.Character, anim, false)
+    end
+
+    for name, anim in Module.Config.AnimationIDs do
+        LoadAnim(name, anim)
     end
 
     return CharacterAbilities
@@ -56,31 +69,31 @@ function CharManager:LoadCharacter(charName: string, charType: "Survivor" | "Kil
     end)
 
     local Char: Model = LocalPlayer.Character
-    local Animate = Utils:FindFirstChild(Char, "Animate")
 
-    local CharModule = Utils:CopyTable(require(Utils:GetCharacterModule(charType, charName, skinName)))
+    local CharModule = Utils.Type.CopyTable(require(Utils.Instance.GetCharacterModule(charType, charName, skinName)))
     CharModule.Owner = LocalPlayer
 
-    Utils:PreloadAssets(CharModule.Config)
+    Utils.Misc.PreloadAssets(CharModule.Config)
 
-    Animate.idle.IdleAnim.AnimationId = CharModule.Config.AnimationIDs.IdleAnimation
-    Animate.walk.WalkAnim.AnimationId = CharModule.Config.AnimationIDs.WalkAnimation
-    Animate.run.RunAnim.AnimationId = CharModule.Config.AnimationIDs.RunAnimation
     local Sprinting = require(Char.PlayerAbilities.Default.Sprinting)
     Sprinting:ReloadAnimation(CharModule.Config.AnimationIDs.RunAnimation)
     Sprinting.SprintMultiplier = CharModule.GameplayConfig.SprintSpeedMultiplier
 
-    local CharacterAbilities = self:_InitCharacterAbilities(CharModule)
+    Utils.Instance.FindFirstChild(Char, "PlayerAttributes.AnimationTransitionTime", 0).Value = CharModule.Config.AnimationTransitionTime
 
-    if charType == "Killer" then
-        local Slash = require(Char.PlayerAbilities.CharacterAbilities).Abilities.Slash
-        Slash:ReloadAnimation(CharModule.Config.AnimationIDs.SlashAnimation)
-        Slash.Duration = CharModule.GameplayConfig.SlashDuration
-        Slash.Cooldown = CharModule.GameplayConfig.SlashCooldown
-    elseif charType ~= "Survivor" then
-        LocalPlayer:Kick("https://www.youtube.com/watch?v=L8XbI9aJOXk")
-        return
-    end
+    --loading any anims in `Config.AnimationIDs` that aren't loaded by the engine itself
+    task.defer(function()
+        for name, anim in CharModule.Config.AnimationIDs do
+            local animCodeName = name:gsub("Animation", "")
+            if table.find(Character.AutoLoadedAnims, animCodeName) or animCodeName:lower():find("execution") then
+                continue
+            end
+
+            CharModule.GameplayConfig.Cache.Animations[animCodeName.."Anim"] = Utils.Character.LoadAnimationFromID(Char, anim, false)
+        end
+    end)
+
+    local CharacterAbilities = self:_InitCharacterAbilities(CharModule)
 
     Char.Effects.ChildAdded:Connect(function(newChild)
         if newChild.Name == "Stunned" then
@@ -96,7 +109,7 @@ function CharManager:LoadCharacter(charName: string, charType: "Survivor" | "Kil
         end
     end)
 
-    AbilityGUI:InitGUI()
+    AbilityGUI.InitGUI()
 
     if CharModule.OnInit then
         CharModule:OnInit(Char)
