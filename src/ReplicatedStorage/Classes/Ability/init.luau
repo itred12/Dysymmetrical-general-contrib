@@ -1,4 +1,7 @@
 --!nocheck
+
+--TODO: mayyyyyyybe use janitor in this and link it to the character
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -417,6 +420,7 @@ function AbilityType.GetDefaultAbilitySettings(): Ability
             return EnoughUses
             and self.Owner.Character:FindFirstChildOfClass("Humanoid").Health > 0 --if the player's alive
             and not self.Owner.Character:FindFirstChild("HumanoidRootPart").Anchored --if the player isn't restrained by initial round setup
+            and not self.Owner.Character:GetAttribute("Executing")
             and not Emoting
             and not EffectPrevention
             and not OnCooldown
@@ -447,12 +451,102 @@ function AbilityType.GetDefaultAbilitySettings(): Ability
     }
 end
 
+function AbilityType.GetDefaultPassiveAbilitySettings()
+    return Utils.Type.DeepTableOverwrite({
+        Passive = true,
+
+        Init = function(self: Ability, charModule: any, plr: Player)
+            self.Owner = plr
+            self.CharModule = charModule
+            self.UsesLeft = self.UseSettings.InitialUses
+            if RunService:IsServer() then
+                Utils.Misc.Print("Initting "..self.Name.." ability for "..plr.Name)
+
+                --is this exploitable? yes.
+                --do i give a fuck? no.
+                --thanks byfron.
+
+                self.OwnerProperties = {
+                    Character = self.Owner.Character,
+                    HRP = Utils.Instance.FindFirstChild(self.Owner.Character, "HumanoidRootPart"),
+                    CommonFunctions = require(ServerScriptService.System.CommonFunctions),
+                }
+
+                --clearing ability connections to dispose of this code when the player gets readded
+                table.insert(self.Connections, plr.CharacterAdded:Connect(function()
+                    self:Destroy()
+                end))
+
+                --executes any extra initialization code that the ability might need
+                if self.ExtraInit then
+                    self:ExtraInit()
+                end
+
+                return
+            end
+
+            self.OwnerProperties = {
+                Character = self.Owner.Character,
+                HRP = Utils.Instance.FindFirstChild(self.Owner.Character, "HumanoidRootPart"),
+                InputManager = require(self.Owner.PlayerScripts.InputManager),
+                SpeedManager = require(self.Owner.Character.PlayerAttributeScripts.SpeedManager),
+                FOVManager = require(self.Owner.Character.PlayerAttributeScripts.FOVManager),
+                EffectManager = require(self.Owner.Character.PlayerAttributeScripts.EffectManager),
+                EmoteManager = require(self.Owner.Character.Miscellaneous.EmoteManager),
+                TurnToMoveDirection = require(self.Owner.PlayerScripts.Miscellaneous.TurnToMoveDirection),
+            }
+
+            --clearing ability connections to dispose of this code when the player gets readded
+            table.insert(self.Connections, self.Owner.CharacterAdded:Connect(function()
+                self:Destroy()
+            end))
+
+            --executes any extra initialization code that the ability might need
+            if self.ExtraInit then
+                self:ExtraInit()
+            end
+        end,
+        ReloadAnimation = function(self: Ability, id: string)
+            warn("Ability \""..self.Name.."\" is a Passive, so no use animation can be assigned to it!")
+        end,
+        PlayUseAnimation = function(self)
+            warn("Ability \""..self.Name.."\" is a Passive, so no use animation is available!")
+        end,
+        AttemptUse = function(self: Ability)
+            warn("Ability \""..self.Name.."\" is a Passive, so it can't be used through input!")
+        end,
+        ChangeAbilityCharges = function(self: Ability, _Type: "Add" | "Set" | "Take", _amount: number)
+            warn("Ability \""..self.Name.."\" is a Passive, so charges aren't applied!")
+        end,
+
+        PlayUseAnimationOnUse = false,
+
+        Cooldown = 0,
+
+        CanUse = function(_self: Ability): boolean
+            return true
+        end,
+        UseConditions = function(_self: Ability): boolean
+            return true
+        end,
+
+        Duration = 0,
+
+        DisableOtherAbilitiesOnPerform = false,
+        DisableSlashOnPerform = false,
+    }, AbilityType.GetDefaultAbilitySettings())
+end
+
 --- Creates an ability with the settings specified in `Props`.
 --- Every property that has to be there has a fallback, so not all properties have to be written there if the default values are fine.
 function AbilityType.CreateAbility(Props: Ability): Ability
     Props = Props or {}
     
-    Utils.Type.DeepTableWrite(Props, AbilityType.GetDefaultAbilitySettings())
+    Utils.Type.DeepTableWrite(Props,
+        Props.Passive and
+            AbilityType.GetDefaultPassiveAbilitySettings() or
+            AbilityType.GetDefaultAbilitySettings()
+    )
 
     return Props
 end

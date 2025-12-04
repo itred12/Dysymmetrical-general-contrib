@@ -122,7 +122,11 @@ function CommonFunctions.DamagePlayer(sourcePlayer: Player, targetHumanoid: Huma
 end
 
 --- Applies an effect on a specific humanoid. It can be a player or an NPC, it doesn't matter.
-function CommonFunctions.ApplyEffect(hum: Humanoid, name: string, level: number?, duration: number?, subfolder: string?)
+function CommonFunctions.ApplyEffect(hum: Humanoid, name: string, level: number?, duration: number?, subfolder: string?, overwriteExisting: boolean?) : NumberValue?
+	if overwriteExisting == nil then
+		overwriteExisting = true
+	end
+
 	local char = hum.Parent
 
 	local CharEffects = Utils.Instance.FindFirstChild(char, "Effects")
@@ -132,9 +136,19 @@ function CommonFunctions.ApplyEffect(hum: Humanoid, name: string, level: number?
 			return
 		end
 	end
+
+	local ExistingEffect = CharEffects:FindFirstChild(name)
+	if ExistingEffect then
+		if not overwriteExisting then
+			return
+		end
+
+		ExistingEffect:Destroy()
+	end
 	
 	local EffectModule = Utils.Instance.GetEffectModule(name, subfolder)
-	local EffectValue = CharEffects:FindFirstChild(name) or Instance.new("NumberValue")
+
+	local EffectValue = Instance.new("NumberValue")
 
 	EffectValue.Name = name
 	EffectValue.Value = level or EffectModule.Level
@@ -152,6 +166,23 @@ function CommonFunctions.ApplyEffect(hum: Humanoid, name: string, level: number?
 		end
 	end)
 	EffectModule:Apply(level, char, duration or EffectModule.Duration)
+
+	return EffectValue
+end
+
+function CommonFunctions.RemoveEffect(char: Model | Humanoid, name: string)
+	char = char:IsA("Model") and char or char.Parent
+
+	local CharEffects = Utils.Instance.FindFirstChild(char, "Effects")
+
+	local EffectInst = CharEffects:FindFirstChild(name)
+	if not EffectInst then
+		return
+	end
+	
+	local EffectModule = Utils.Instance.GetEffectModule(name, EffectInst:GetAttribute("Subfolder"))
+	EffectModule:Remove(char)
+	EffectInst:Destroy()
 end
 
 --- Grants money and/or EXP to a player and displays a notification showing it.
@@ -205,9 +236,66 @@ function CommonFunctions._GrantEXPToPlayer(Player: Player, amount: number, visua
 		return
 	end
 	local CharacterName = Player.Character:GetAttribute("CharacterName")
+	local SkinName = Player.Character:GetAttribute("CharacterSkinName")
 
 	local CharValue = Utils.PlayerData.GetPlayerOwned(Player, Role.Value.."s."..CharacterName, false)
 	CharValue.Value += amount
+
+	local CharModule = require(Utils.Instance.GetCharacterModule(Role.Value, CharacterName))
+	if CharModule.Config.Milestones then
+		local CurrentLevel, _EXPRemaining, _EXPForNextLevel = Utils.Math.CalculateLevelFromEXP(CharValue.Value)
+		for Level, Skin in CharModule.Config.Milestones do
+			if Level <= CurrentLevel then
+				CommonFunctions.GrantCharacterItemToPlayer(Player, Role.Value, CharacterName, SkinName)
+			end
+		end
+	end
+end
+
+--- Grants a character / skin to a player.
+--- 
+--- Should be called from achievements or milestone granting.
+function CommonFunctions.GrantCharacterItemToPlayer(Player: Player, Type: "Killer" | "Survivor", CharacterName: string, SkinName: string)
+	--shouldn't give anything if in a private server
+	if #game.PrivateServerId > 0 then
+		return
+	end
+
+	--checks for the parent
+	--if SkinName is available, get the Skins folder
+	--if not, get the role's folder
+	local Parent = Utils.Instance.FindFirstChild(Player, "PlayerData.Purchased."..(SkinName and "Skins" or Type.."s"), 0)
+
+	--if the value that's about to be created is already there, don't do anything
+	if Utils.Instance.FindFirstChild(Parent, CharacterName..("."..SkinName or ""), 0) then
+		return
+	end
+
+	--if the module supposedly doesn't exist, don't do anything
+	local CharacterModule = Utils.Instance.GetCharacterModule(Type, CharacterName, SkinName)
+	if not CharacterModule then
+		return
+	end
+
+	--if SkinName is available, get an existing character skins's folder or create it if non-existent, then set the result as the value's parent
+	if SkinName then
+		local CharFolder = Parent:FindFirstChild(CharacterName)
+		if not CharFolder then
+			CharFolder = Instance.new("Folder")
+			CharFolder.Name = CharacterName
+			CharFolder.Parent = Parent
+		end
+
+		Parent = CharFolder
+	end
+
+	--create the item's value
+	local Value = Instance.new("IntValue")
+	Value.Name = SkinName or CharacterName --if SkinName is available, it should be named that
+	Value.Parent = Parent
+
+	--display the reward notification
+	Network:FireClientConnection(Player, "ShowRewardNotification", "REMOTE_EVENT", CharacterModule, "QuotedGranted"..(SkinName and "Skin" or "Character"))
 end
 
 --- Updates a player's stat specified by a `string` path.
@@ -314,16 +402,20 @@ function CommonFunctions.PlayerHasPermissionRank(Player: Player, MandatoryRank: 
 	return Rank < (typeof(MandatoryRank) == "string" and Utils.Ranks[MandatoryRank] or MandatoryRank), Rank
 end
 
-function CommonFunctions.RigImpulse(Rig: Model | BasePart, magnitude: number, direction: Vector3)
+function CommonFunctions.RigImpulse(Rig: Model | BasePart, magnitude: number, direction: Vector3, allowAssembly: boolean?)
 	if magnitude <= 0 or direction == Vector3.zero then
 		return
+	end
+
+	if allowAssembly == nil then
+		allowAssembly = true
 	end
 
 	local HRP = Rig:IsA("Model") and Rig:FindFirstChild("HumanoidRootPart") or Rig
 
 	-- If the knockback property of the hitbox is greater than 15, fling the target(?) -itrid
 	-- FLINGING GO BOOM -dys
-	if magnitude >= 15 then
+	if magnitude >= 15 and allowAssembly then
 		HRP.AssemblyLinearVelocity = direction * magnitude * 10
 	
 	-- Otherwise, lightly push the target instead. -itrid

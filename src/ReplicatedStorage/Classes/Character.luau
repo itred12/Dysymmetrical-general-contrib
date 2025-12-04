@@ -1,5 +1,5 @@
 --!nocheck
-
+--asdjl;klksdalhjk.adshjnklasdjklasdjasdjadsjkl;'ajl;k'fas
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Utils = require(ReplicatedStorage.Modules.Utils)
@@ -29,6 +29,7 @@ export type Survivor = {
         --- The display name of the character.
         Name: string,
         --- The character's `More Info` page content.
+        --- 
         --- To know how to write this, check the example characters's modules.
         Description: {
             --- A section of the `More Info` page of this character.
@@ -62,6 +63,7 @@ export type Survivor = {
             --- The animation that'll play before a stun ends.
             StunnedEnd: string?,
             --- The animation that'll play in the character model's preview in the shop.
+            --- 
             --- If none is provided, `IdleAnimation` will play instead.
             PreviewAnimation: string?,
         },
@@ -71,15 +73,23 @@ export type Survivor = {
         --- Will be overriden by abilities if their `Ability.AnimationTransitionTime` exists, but will still work for idle, walk and run animations.
         AnimationTransitionTime: number,
 
-        --- Any voicelines this character might have. It's built with strings as keys, and either strings, string tables or string dictionaries as values for random voicelines.
-        --- * You can also name voicelines after abilities' code names (the ones that you define them with) so that they play when those abilities are used.
-        --- * For example, if I have an ability named `TestAbility` in code and I add a `TestAbility` field here, it'll play a voiceline from here when I use it.
+        --- Any voicelines this character might have. It's built with strings as keys, and either strings or string dictionaries as values for random voicelines.
+        --- 
+        --- For killers, use `Kill` to set the kill voicelines.
+        --- 
+        --- In it set a `Default` value for any survivor.
+        --- 
+        --- You may set customs for skins and characters using `"[SkinName][CharacterName]"` format.
+        --- 
+        --- Remove `[SkinName]` to make it for a survivor in general.
         Voicelines: {
             --- The voiceline (s) that'll play at random times while the character isn't saying any other voiceline.
             Idle: (string | {string} | {[string]: string | {string}})?,
             --- The voiceline (s) that'll play when LMS starts.
+            --- 
             --- If there's any character that you want this character to have a custom voiceline for, add its codename here.
-            --- * If there's a specific skin, add the skin's codename at the beginning and *then* add the character's codename (e.g. `[SkinName][CharacterName]`, without spaces).
+            --- 
+            --- If there's a specific skin, add the skin's codename at the beginning and *then* add the character's codename (e.g. `[SkinName][CharacterName]`, without spaces).
             LMS: {
                 --- The default voiceline (s).
                 Default: string | {string} | {[string]: string | {string}},
@@ -89,6 +99,35 @@ export type Survivor = {
             Stunned: (string | {string} | {[string]: string | {string}})?,
 
             [string]: string | {string} | {[string]: string | {string}},
+        },
+
+        --[=[
+            The names of the milestones for this character, defined by the number of the level they're granted on.    
+        
+            e.g. for making a Milestone II (lvl 50), I would define it like so:
+
+            ```lua
+            [CHARACTER_VARIABLE_NAME] = Character.CreateKiller({
+                Config = {
+                    Milestones = {
+                        [50] = "CharacterMilestoneII", -- The level it's granted on -> The name of the skin's module
+                    },
+                },
+            })
+            ```
+        ]=]
+        Milestones: {[number]: string},
+
+        --- Any SFX that you may want to play with the character.
+        --- Voicelines go in `Voicelines`.
+        Sounds: {
+            --- The sound the character'll make when taking a step.
+            --- 
+            --- The walk & run animations MUST have a `Footstep` animation event when they take a step for this to work.
+            --- 
+            --- If an array of strings is passed, the game'll choose a random sound every time.
+            FootstepSounds: (string | {string})?,
+            [string]: (string | {string}),
         },
     },
 
@@ -119,7 +158,8 @@ export type Survivor = {
     --- An empty function that you can replace to execute custom behaviour when this character initializes.
     OnInit: (self: Survivor, charModel: Model) -> ()?,
     --- SERVER FUNCTION: An empty function that you can replace to execute custom behaviour when this character gets hit.
-    --- * If you want the character to not get affected by the hit, you can return `"Ignored"`.
+    --- 
+    --- If you want the character to not get affected by the hit, you can return `"Ignored"`.
     OnHit: (self: Survivor, hitbox: any, damage: number) -> (string?)?,
 }
 
@@ -149,6 +189,8 @@ function CharTypes.GetDefaultSurvivorSettings(): Survivor
             AnimationTransitionTime = 0.1,
 
             Voicelines = {},
+
+            Sounds = {},
         },
 
         GameplayConfig = {
@@ -173,6 +215,7 @@ function CharTypes.GetDefaultSurvivorSettings(): Survivor
 end
 
 --- Creates a survivor with the settings specified in `Props`.
+--- 
 --- Every property that has to be there has a fallback, so not all properties have to be written there if the default values are fine.
 function CharTypes.CreateSurvivor(Props: Survivor): Survivor
     Props = Props or {}
@@ -191,6 +234,7 @@ export type Killer = {
         --- The display name of the character.
         Name: string,
         --- The character's `More Info` page content.
+        --- 
         --- To know how to write this, check the example characters's modules.
         Description: {
             --- A section of the `More Info` page of this character.
@@ -236,6 +280,7 @@ export type Killer = {
             --- The animation that'll play before a stun ends.
             StunnedEnd: string?,
             --- The animation that'll play in the character model's preview in the shop.
+            --- 
             --- If none is provided, `IdleAnimation` will play instead.
             PreviewAnimation: string?,
             --- The animation that the killer will have in the intro animation.
@@ -243,8 +288,11 @@ export type Killer = {
             --- The animation that the camera will have in the intro animation.
             CameraRig: string?,
             --- The animations that'll play when executing a player.
+            --- 
             --- Inside, make a `Default` for any survivor.
+            --- 
             --- You may make others with the `"[SkinName][CharacterName]"` format to add customs for skins and characters, e.g. `YourselfCommander = "rbxassetid://0000000000"`.
+            --- 
             --- Remove `[SkinName]` to make it for a survivor in general, e.g. `Commander = "rbxassetid://0000000000"`.
             Execution: {
                 Default: {
@@ -264,14 +312,20 @@ export type Killer = {
         AnimationTransitionTime: number,
 
         --- Any voicelines this character might have. It's built with strings as keys, and either strings or string dictionaries as values for random voicelines.
+        --- 
         --- For killers, use `Kill` to set the kill voicelines.
+        --- 
         --- In it set a `Default` value for any survivor.
+        --- 
         --- You may set customs for skins and characters using `"[SkinName][CharacterName]"` format.
+        --- 
         --- Remove `[SkinName]` to make it for a survivor in general.
         Voicelines: {
             --- The voiceline (s) that'll play when this character kills a survivor.
+            --- 
             --- If there's any character that you want this character to have a custom voiceline for, add its codename here.
-            --- * If there's a specific skin, add the skin's codename at the beginning and *then* add the character's codename (e.g. `[SkinName][CharacterName]`, without spaces).
+            --- 
+            --- If there's a specific skin, add the skin's codename at the beginning and *then* add the character's codename (e.g. `[SkinName][CharacterName]`, without spaces).
             Kill: {
                 --- The default voiceline (s).
                 Default: (string | {string}),
@@ -280,8 +334,10 @@ export type Killer = {
             --- The voiceline (s) that'll play at random times while the character isn't saying any other voiceline.
             Idle: (string | {string} | {[string]: string | {string}})?,
             --- The voiceline (s) that'll play when LMS starts.
+            --- 
             --- If there's any character that you want this character to have a custom voiceline for, add its codename here.
-            --- * If there's a specific skin, add the skin's codename at the beginning and *then* add the character's codename (e.g. `[SkinName][CharacterName]`, without spaces).
+            --- 
+            --- If there's a specific skin, add the skin's codename at the beginning and *then* add the character's codename (e.g. `[SkinName][CharacterName]`, without spaces).
             LMS: {
                 --- The default voiceline (s).
                 Default: string | {string} | {[string]: string | {string}},
@@ -305,10 +361,29 @@ export type Killer = {
             L4: string,
         },
 
+        --[=[
+            The names of the milestones for this character, defined by the number of the level they're granted on.    
+        
+            e.g. for making a Milestone II (lvl 50), I would define it like so:
+
+            ```lua
+            [CHARACTER_VARIABLE_NAME] = Character.CreateKiller({
+                Config = {
+                    Milestones = {
+                        [50] = "CharacterMilestoneII", -- The level it's granted on -> The name of the skin's module
+                    },
+                },
+            })
+            ```
+        ]=]
+        Milestones: {[number]: string},
+
         --- CLIENT FUNCTION: Empty function to execute code when the killer intro initializes (loads its content).
+        --- 
         --- `KillerRig` and `CameraRig` will be `nil` when it's a 2D intro (`UiIntro`).
         OnIntroInit: (self: Killer, intro: KillerIntro.AnimatedIntro | KillerIntro.UiIntro, KillerRig: Model, CameraRig: Model) -> ()?,
         --- CLIENT FUNCTION: Empty function to execute code when the killer intro plays.
+        --- 
         --- `KillerRig` and `CameraRig` will be `nil` when it's a 2D intro (`UiIntro`).
         OnIntroPlay: (self: Killer, intro: KillerIntro.AnimatedIntro | KillerIntro.UiIntro, KillerRig: Model, CameraRig: Model, AnimDuration: number) -> ()?,
 
@@ -316,10 +391,17 @@ export type Killer = {
         --- Voicelines go in `Voicelines`.
         Sounds: {
             --- The sound that'll play when the killer's intro plays.
+            --- 
             --- Can also be a table to play a random sound.
             IntroSound: (string | {string})?,
+            --- The sound the character'll make when taking a step.
+            --- 
+            --- The walk & run animations MUST have a `Footstep` animation event when they take a step for this to work.
+            --- 
+            --- If an array of strings is passed, the game'll choose a random sound every time.
+            FootstepSounds: (string | {string})?,
             --- The SFX of the Execution animations.
-            --- Since animations may vary, it's possible to set custom sounds for each.*
+            --- Since animations may vary, it's possible to set custom sounds for each.
             Execution: {
                 Default: (string | {string}),
                 [string]: (string | {string}),
@@ -327,7 +409,9 @@ export type Killer = {
             [string]: (string | {string}),
         },
 
-        --- The CFrame value that'll be added to a survivor's CFrame when snapping to a killer's CFrame by being executed by them. Defaults to `CFrame.new(0, 0, 5)` in `Hitbox`.
+        --- The CFrame value that'll be added to a survivor's CFrame when snapping to a killer's CFrame by being executed by them.
+        --- 
+        --- Defaults to `CFrame.new(0, 0, 5)` in `Hitbox`.
         ExecutionSurvivorCFrameOffset: CFrame?,
     },
 
@@ -358,8 +442,11 @@ export type Killer = {
     --- An empty function that you can replace to execute custom behaviour when this character initializes.
     OnInit: (self: Killer, charModel: Model) -> ()?,
     --- SERVER FUNCTION: An empty function that you can replace to execute custom behaviour when this character gets hit.
-    --- * If you want the character to not get affected by the hit, you can return `"Ignored"`.
-    OnHit: (self: Survivor, hitbox: any, damage: number) -> (string?)?,
+    --- 
+    --- If you want the character to not get affected by the hit, you can return `"Ignored"`.
+    OnHit: (self: Killer, hitbox: any, damage: number) -> (string?)?,
+    --- SERVER FUNCTION: An empty function that you can replace to execute custom behaviour when this character executes a survivor (the animation MUST be set).
+    OnExecution: ((self: Killer, victim: Model, usedAnimName: string) -> ())?,
 }
 
 --- Killer preset for customization.
@@ -398,6 +485,8 @@ function CharTypes.GetDefaultKillerSettings(): Killer
                 L3 = "rbxassetid://78435073515542",
                 L4 = "rbxassetid://100400124559989",
             },
+
+            Sounds = {},
         },
 
         GameplayConfig = {
@@ -418,10 +507,12 @@ function CharTypes.GetDefaultKillerSettings(): Killer
 
         OnInit = nil,
         OnHit = nil,
+        OnExecution = nil,
     }
 end
 
 --- Creates a killer with the settings specified in `Props`.
+--- 
 --- Every property that has to be there has a fallback, so not all properties have to be written there if the default values are fine.
 function CharTypes.CreateKiller(Props: Killer): Killer
     Props = Props or {}
