@@ -9,48 +9,112 @@ local MapTypes = {}
 export type MapObject = Folder & {
 
     --- The model containing all physical parts, scripts, sub-models, etc., which makes up the map itself.
-    MapModel: Model,
+    MapModel: Model & {any},
 
     --- A folder containing the killer and survivor spawn points– specially-marked parts which placed anywhere within the map. 
     Spawnpoints: Folder & {
 
-        --- The spawnpoints or spawnpoint groups that the killer(s) can appear at when the round starts.  
-        KillerSpawns: Folder & ({
+        --- The spawnpoints that the killer(s) can appear at when the round starts.  
+        KillerSpawns: Folder & {
             [string]: SpawnPointMarker
-        } | {
-            [number]: SpawnPointGroup
-        }),
+        },
 
-        --- The spawnpoints or spawnpoint groups that survivors can appear at when the round starts.
-        SurvivorSpawns: Folder & ({
+        --- The spawnpoints that survivors can appear at when the round starts.
+        SurvivorSpawns: Folder & {
             [string]: SpawnPointMarker
-        } | {
-            [number]: SpawnPointGroup
-        })
+        }
     },
 
     --- Internal properties which can change the behavior of the map. You can add properties which restrict the map to only being chosen under certain conditions, increase or decrease the likelihood of it being chosen, make certain modes more likely on it, and so on.
     Properties: Folder & {
 
         --[[
-        Optional. Weighs the odds for or against this map's favor when one is being chosen for the round.. 
+        Optional. Increases how often this map is chosen over all others by adding more copies of it to the pool, effectively giving it more "rolls". 
         
-        ### Info:
+        Values greater than 1 will increase the chance that this map is picked by adding it that many times to the pool.
 
-         – Values greater than or equal to 1 will increase the chance that this map is picked by a flat amount.
-
-         – Values less than 1 but greater than 0 will reduce the chance this map is picked, using the value as a multiplier.
-
-         – Values less than or equal to 0 will disable the map entirely.
+        Must be an integer value.
         ]]--
-        Weight: NumberValue?
+        Weight: IntValue?,
+
+        --[[
+        Optional. Determines how players are divided across the map by splitting them into groups which are each placed at the same spawnpoint.
+
+        For example, a SpawnGroupSize of 2 means that the game will split both teams into groups of two and attempt to spawn both players in that group at the same spawnpoint.
+
+        If this is absent or 0, this will be ignored, and every player will choose a random spawnpoint individually.
+
+        Can be set to a number greater than the total number of players on a given team (i.e., 999) and it will simply choose one random spawnpoint per team to spawn every player for that team.
+        ]]
+        SpawnGroupSize: IntValue?
+
+
+
     }
 }
+
+
+--- Nearly identical to the MapObject type, but in table format instead.
+export type MapTree = {
+    --- The model containing all physical parts, scripts, sub-models, etc., which makes up the map itself.
+    MapObject: MapObject,
+
+    --- An indexed table containing pointers to all modulescripts that are within the map.
+    Scripts: {
+        [number]: ModuleScript
+    },
+
+    --- A folder containing the killer and survivor spawn points– specially-marked parts which placed anywhere within the map. 
+    Spawnpoints: {
+
+        --- The spawnpoints that the killer(s) can appear at when the round starts.  
+        KillerSpawns: {
+            [SpawnPointMarker]: {[string]: any}
+        },
+
+        --- The spawnpoints that survivors can appear at when the round starts.
+        SurvivorSpawns: {
+            [SpawnPointMarker]: {[string]: any}
+        },
+    },
+
+    --- Internal properties which can change the behavior of the map. You can add properties which restrict the map to only being chosen under certain conditions, increase or decrease the likelihood of it being chosen, make certain modes more likely on it, and so on.
+    Properties: {
+
+        --[[
+        Optional. Increases how often this map is chosen over all others by adding more copies of it to the pool, effectively giving it more "rolls". 
+        
+        Values greater than 1 will increase the chance that this map is picked by adding it that many times to the pool.
+
+        Must be an integer value.
+        ]]--
+        Weight: number?,
+
+        --[[
+        Optional. Determines how players are divided across the map by splitting them into groups which are each placed at the same spawnpoint.
+
+        For example, a SpawnGroupSize of 2 means that the game will split both teams into groups of two and attempt to spawn both players in that group at the same spawnpoint.
+
+        If this is absent or 0, this will be ignored, and every player will choose a random spawnpoint individually.
+
+        Can be set to a number greater than the total number of players on a given team (i.e., 999) and it will simply choose one random spawnpoint per team to spawn every player for that team.
+        ]]
+        SpawnGroupSize: number?
+
+
+
+    }
+}
+}
+
+
 
 -- Concretely defining what a SpawnPoint is, with some details.
 
  --[[
     A "marker" part, which tells the game where valid killer or survivor spawns are within a map.
+
+    Just regular old basepart, really.
 
     Place one in the map, add it to the right folder, and the game will choose randomly between it and all of the other registered spawnpoints when placing killers or survivors into a round.
 
@@ -70,26 +134,25 @@ export type MapObject = Folder & {
 
      – If the spawnpoint is shape `sphere`, the game will always spawn the character at the center of the sphere, but will never spawn them in the air– always placing them on the ground below the marker.
  ]]--
-export type SpawnPointMarker = BasePart & {
+export type SpawnPointMarker = BasePart | (BasePart & {
 
-    -- Spawnpoint properties. Feel free to add your own.
+    -- Spawnpoint properties, added as attributes to the part. The below one is an example, feel free to add your own.
 
     --[[
-        Optional. Determines often this spawnpoint is chosen over all others in its group. 
+        Optional. Increases how often this spawnpoint is chosen over all others by adding more copies of it to the pool, effectively giving it more "rolls". 
         
-        ### Info:
+        Values greater than 1 will increase the chance that this spawnpoint is picked by a flat amount.
 
-         – Values greater than or equal to 1 will increase the chance that this spawnpoint is picked by a flat amount.
-
-         – Values less than 1 but greater than 0 will reduce the chance this spawnpoint is picked, using the value as a multiplier.
-
-         – Values less than or equal to 0 will disable the spawnpoint entirely.
+        Must be an integer value.
     ]]--
-    Weight: NumberValue?
-}
+    Weight: number?
+})
 
 
--- Spawnpoint groups
+
+
+-- Spawnpoint groups (DEFUNCT)
+-- Dont think it really fit the engine– made things too complex for something that's supposed to be easy(ier) to understand.
 
 --[[
     Allows for "groups" of spawnpoints, numbered folders of specific spawnpoints in the map.
